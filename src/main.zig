@@ -235,10 +235,10 @@ fn printUsage(io: std.Io) void {
         \\  --kv-quant <mode>   KV-cache quantization scheme:
         \\                        8 or 4 — affine group quant; default 8 on
         \\                          every model (GLM refuses 4). tbq4/tbq3 are
-        \\                          rotated fixed-codebook KV (block=128,
-        \\                          ~3.7/~2.6 effective bits/token byte);
-        \\                          decode is dense-read in v1. 16 (or `off`)
-        \\                          keeps dense bf16 KV. It outranks a
+        \\                          rotated fixed-codebook KV (block=128: 66 B per
+        \\                          block for tbq4 = 4.125 effective bits, 50 B for
+        \\                          tbq3 = 3.125 — half the bytes of kv8's 132 B).
+        \\                          16 (or `off`) keeps dense bf16 KV. It outranks a
         \\                          model's model-settings.json `kv_quant`.
         \\                          Per-request override via the `kv_quant`
         \\                          body field.
