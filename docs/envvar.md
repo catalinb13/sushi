@@ -4,9 +4,9 @@ A temporary A/B knob is fine while a kernel, optimization or fix is being develo
 
 **Reading the columns.** *where* is file:line of the read site (served path first; a group lists files). *read* is `once` (cached on first use on the served path), `boot` or `load` (once at startup or model load), `per request`, `per call` / `per forward` / `per round` (an uncached `getenv` on a repeated path), or `test` (never on the served path). Every diagnostic read treats empty and a leading `0` as off. *documented* is a hit in `docs/`, `README.md`, `tests/CLAUDE.md` or `--help`.
 
-**Summary.** 167 vars. By kind: tradeoff levers 13, diagnostics 39, microbenches 61, test-only seams 43, paths and config 6, flag twins that are not equivalents 5.
+**Summary.** 169 vars. By kind: tradeoff levers 15, diagnostics 39, microbenches 61, test-only seams 43, paths and config 6, flag twins that are not equivalents 5.
 
-## Tradeoff levers (13)
+## Tradeoff levers (15)
 
 Two arms that trade speed, memory or exactness, or a policy a user may want to move.
 
@@ -25,6 +25,8 @@ Two arms that trade speed, memory or exactness, or a policy a user may want to m
 | `SUSHI_NGRAM_WARM` | `qwen4_exp.zig:146` | default on: pread the Flash-Next n-gram table at load; `0` skips it | once | yes: qwen4-arch, qwen4-perf |
 | `SUSHI_QSA_SCORE_SHEET_MB` | `transformer.zig:5868` | QSA block-score sheet budget in MB (default 256); the memory bill reads it too, and a moved value is logged | once | no |
 | `SUSHI_ROUND_COST_PERSIST` | `round_cost.zig:759` | `1` persists the measured MTP round-cost table across boots (default off) | once | yes: engine-mtp, mimo2-perf, qwen4-perf, ... |
+| `SUSHI_TBQ_ENCODE_FUSED` | `kv_quant.zig:451` | default on: `sushi_tbq_encode` quantizes TBQ KV rows in one dispatch; `0` restores the composed encode chain (byte-parity pinned by tests) | once | yes: engine-kv-cache |
+| `SUSHI_TBQ_TAKE_FUSED` | `transformer.zig:3631` | default on: `sushi_tbq_take` fused rotated-domain subset read for the QSA gather arms; `0` restores the composed take+dequantize chain | once | yes: engine-kv-cache |
 
 ## Diagnostics (39)
 

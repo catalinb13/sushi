@@ -52,7 +52,7 @@ The map is the code's: every argument the parsers accept, at `main` 393228b9 les
 
 | flag | default → effect | who | documented | recommendation |
 |---|---|---|---|---|
-| `--kv-quant` | `8` → KV scheme 8, 4 or 16 (`off` = BF16); also `kv_quant` in settings and per request (main.zig:972) | user | help, usage, engine-kv-cache; 21 tests | keep |
+| `--kv-quant` | `8` → KV scheme 8, 4, 16 (`off` = BF16) or rotated-codebook `tbq4`/`tbq3` (gs128); also `kv_quant` in settings and per request (main.zig:972) | user | help, usage, engine-kv-cache; 21 tests | keep |
 | `--qwen-gdn` | `bf16` → store the GatedDeltaNet state in `fp32`, Qwen only; the decay gate is f32 either way (main.zig:966) | user | help, engine-kernels, quality-kld; 0 tests (kld parse test) | keep: the long-context precision tradeoff (measured against the f32-gate default: raw KLD -0.5% and held-out code -1%, both inside the noise; about -2% on 4-stream aggregate and +54 MB per checkpoint, [qwen4-kld](qwen4-kld.md#gdn-f32-teacher), [qwen4-perf](qwen4-perf.md#gdn-f32-cost)); add a serve-side test |
 | `--mtp-head-kv-quant` | off → Qwen's MTP head KV follows `--kv-quant`; no effect on MiMo (main.zig:762) | machine | help, usage, README, engine-mtp; 0 tests | keep: the long-context memory bills use it |
 
