@@ -72,6 +72,12 @@ pub const MIN_DISK_ADVANTAGE_TOKENS: u32 = 256;
 /// in well under the restore cost).
 pub const MIN_PERSIST_TOKENS: u32 = 512;
 
+/// The audit ledger §2.2: `manifestQuant` accepts only `affine`, so chunks and
+/// sidecars written for a tbq entry could never be read back. The commit now
+/// declines tbq outright (write nothing, promise nothing) and the entry lives
+/// in the RAM tier only. One-shot log latch.
+var tbq_commit_decline_logged: bool = false;
+
 pub const DEFAULT_CHUNK_TOKENS: u32 = 1024;
 
 /// Budget floor for a decline-spill's flush: the client is already gone, so
@@ -1672,6 +1678,17 @@ pub const DiskTier = struct {
         s: mlx.mlx_stream,
         flush_bound: u64,
     ) !PersistOutcome {
+        // A tbq entry is not disk-restorable (`manifestQuant` is affine-only),
+        // and sidecars written for it are dead bytes too — decline the whole
+        // commit; the RAM tier keeps serving the prefix (it licenses nothing
+        // that would discard the RAM copy, unlike `persisted`).
+        if (config.scheme == .tbq) {
+            if (!tbq_commit_decline_logged) {
+                tbq_commit_decline_logged = true;
+                log.info("[disk-cache] kv-quant tbq is not disk-restorable: commit declined (entries stay in RAM)\n", .{});
+            }
+            return .skipped;
+        }
         var tokens = all_tokens;
         var dflash_snap = all_dflash;
         var mtp_snap = all_mtp;
@@ -4665,6 +4682,44 @@ test "DiskTier: chunked commit + restore round-trips exact KV, step, offsets" {
     // Mismatched key never matches.
     try testing.expect(tier2.bestMatch(&tokens, true, kv_quant.KVQuantConfig.dense) == null);
     try testing.expect(tier2.bestMatch(&tokens, false, kv_quant.KVQuantConfig.affine(4)) == null);
+}
+
+test "DiskTier: tbq commit declined — no dead bytes for a never-restorable scheme" {
+    // `manifestQuant` restores only `affine`: every chunk and sidecar written
+    // for a tbq entry is disk budget spent that no boot can read back (audit
+    // ledger §2.2). The commit must return `skipped` (nothing written, nothing
+    // promised) and leave the tier empty.
+    const io = std.testing.io;
+    const s = mlx.gpuStream();
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    var buf: [512]u8 = undefined;
+    const base = try tmpRoot(&tmp, io, &buf);
+
+    var tier = try DiskTier.init(testing.allocator, io, base, "fp-tbq", 0, 128);
+    defer tier.deinit();
+
+    var cache = try KVCache.initWithConfig(testing.allocator, 2, kv_quant.KVQuantConfig.tbq(4));
+    defer cache.deinit();
+    try fillCache(&cache, s, 2, 600, 128, 0.0, .bfloat16);
+    try testing.expectEqual(@as(usize, 600), cache.step);
+
+    var tokens: [600]u32 = undefined;
+    for (&tokens, 0..) |*t, i| t.* = @intCast(i + 11);
+    const out = try tier.appendCommit(cache.entries, cache.step, cache.config, &tokens, false, null, s);
+    try testing.expectEqual(PersistOutcome.skipped, out);
+    try testing.expectEqual(@as(usize, 0), tier.entryCount());
+
+    // Nothing landed under the fingerprint root either: `init` made the
+    // directory and its `.lock`, the declined commit must add no entry dirs.
+    var root = try tmp.dir.openDir(io, "fp-tbq", .{ .iterate = true });
+    defer root.close(io);
+    var it = root.iterate();
+    while (try it.next(io)) |dent| {
+        if (std.mem.eql(u8, dent.name, ".lock")) continue;
+        std.debug.print("unexpected disk residue: {s}\n", .{dent.name});
+        return error.UnexpectedDiskResidue;
+    }
 }
 
 test "DiskTier: extend commit appends only new chunks (full chunks untouched)" {
