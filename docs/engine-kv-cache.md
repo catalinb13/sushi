@@ -73,6 +73,14 @@ Index: [CLAUDE.md](../CLAUDE.md#docs-index). Related: [engine-prefix-cache](engi
   gather arms; `qsaAlignedSparseAttn` still passes tbq only when the fused prefix
   budget is free (cut>0 declines, so the per-row prefix SDPA never evaluates the
   lazy whole-cache dequant). Engage line: `[qsa-attn] engaged (S=… quant=tbq4/gs128 …)`.
+- TBQ entries live in the RAM prefix tier ONLY: the disk commit
+  (`DiskTier.appendCommitWithSpecBounded`) declines `scheme == .tbq` with
+  `PersistOutcome.skipped` — the restore manifest (`manifestQuant`) accepts only
+  `affine`, so chunks written for tbq were bytes no boot could ever read back,
+  burning the disk budget. The decline logs once:
+  `[disk-cache] kv-quant tbq is not disk-restorable: commit declined`. Teaching
+  the safetensors layout to round-trip tbq (its packed rows are HALF the bytes
+  of an affine-8 restore) is follow-up work.
 - Arch-specific packed readers: QSA on qwen4_exp ([qwen4-qsa-long-context](qwen4-qsa-long-context.md)); the
   matmul2d decode kernel and the fused prefill on MiMo's global layers ([mimo2-arch](mimo2-arch.md#attention-kernels)).
 - `server.kvDequantScratchBytes` bills a dense rebuild as ONE layer at the rows that layer stores (per forward width
